@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RGB bridge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --deck: #22262b;
+      --panel: #2b3036;
+      --rule: #3b4148;
+      --ink: #ebe7df;
+      --dim: #a0a6ad;
+      --live: #8fa3b8;
+      /* replaced every few frames by the average LED color */
+      --font: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+    }
+
+    body {
+      background: var(--deck);
+      color: var(--ink);
+      font: 15px/1.45 var(--font);
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 22px;
+      border-bottom: 1px solid var(--rule);
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--rule);
+      flex: none;
+    }
+
+    .dot.on {
+      background: var(--live);
+      box-shadow: 0 0 14px var(--live);
+    }
+
+    header h1 {
+      font-size: 17px;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    #status {
+      color: var(--dim);
+      font-size: 14px;
+    }
+
+    #rescan {
+      margin-left: auto;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 230px 1fr 290px;
+      min-height: 0;
+    }
+
+    aside,
+    section {
+      min-height: 0;
+      overflow: auto;
+    }
+
+    #effects {
+      border-right: 1px solid var(--rule);
+      padding: 14px 10px;
+    }
+
+    #controls {
+      border-left: 1px solid var(--rule);
+      padding: 18px 20px;
+    }
+
+    .stage {
+      padding: 26px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+      align-items: center;
+    }
+
+    .effect {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: 0;
+      color: var(--ink);
+      font: inherit;
+      padding: 9px 12px 9px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .effect:hover {
+      background: var(--panel);
+    }
+
+    .effect[aria-current="true"] {
+      background: var(--panel);
+      font-weight: 600;
+    }
+
+    .effect[aria-current="true"]::before {
+      content: "";
+      position: absolute;
+      left: 4px;
+      top: 10px;
+      bottom: 10px;
+      width: 4px;
+      border-radius: 2px;
+      background: var(--live);
+    }
+
+    .effect small {
+      display: block;
+      color: var(--dim);
+      font-weight: 400;
+      font-size: 13px;
+    }
+
+    /* The keyboard mirror is the centrepiece: big, dark, lit only by the effect. */
+    #mirror {
+      width: 100%;
+      max-width: 1100px;
+      background: #15181b;
+      border-radius: 14px;
+      padding: 18px;
+    }
+
+    #mirror canvas {
+      display: block;
+      width: 100%;
+    }
+
+    .device-name {
+      color: var(--dim);
+      font-size: 13px;
+      margin: 0 0 8px 2px;
+    }
+
+    .device-name+canvas {
+      margin-bottom: 16px;
+    }
+
+    .device-name+canvas:last-child {
+      margin-bottom: 0;
+    }
+
+    .preview-wrap {
+      width: 100%;
+      max-width: 480px;
+    }
+
+    .preview-wrap p {
+      color: var(--dim);
+      font-size: 13px;
+      margin: 0 0 6px;
+    }
+
+    #preview {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 320 / 200;
+      overflow: hidden;
+      border-radius: 10px;
+      background: #000;
+    }
+
+    #frame {
+      position: absolute;
+      left: 0;
+      top: 0;
+      border: 0;
+      transform-origin: 0 0;
+      pointer-events: none;
+    }
+
+    #snapshot {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    #frame[hidden],
+    #snapshot[hidden] {
+      display: none;
+    }
+
+    #controls h2 {
+      font-size: 22px;
+      font-weight: 800;
+      margin: 0 0 4px;
+      line-height: 1.15;
+    }
+
+    #controls .desc {
+      color: var(--dim);
+      margin: 0 0 20px;
+      font-size: 14px;
+    }
+
+    .field {
+      margin-bottom: 18px;
+    }
+
+    .field label {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+
+    .field output {
+      color: var(--dim);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .field.check label {
+      justify-content: flex-start;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    input[type=range] {
+      width: 100%;
+      accent-color: var(--live);
+    }
+
+    input[type=checkbox] {
+      accent-color: var(--live);
+      width: 18px;
+      height: 18px;
+      margin: 0 8px 0 0;
+    }
+
+    input[type=color] {
+      width: 100%;
+      height: 36px;
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 3px;
+    }
+
+    select,
+    input[type=text],
+    button {
+      width: 100%;
+      font: inherit;
+      color: var(--ink);
+      background: var(--panel);
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      padding: 7px 10px;
+    }
+
+    button {
+      width: auto;
+      cursor: pointer;
+    }
+
+    button:hover {
+      border-color: var(--dim);
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--ink);
+      outline-offset: 2px;
+    }
+
+    hr {
+      border: 0;
+      border-top: 1px solid var(--rule);
+      margin: 22px 0;
+    }
+
+    .empty {
+      color: var(--dim);
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+
+    @media (max-width: 900px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      #effects,
+      #controls {
+        border: 0;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .stage {
+        padding: 16px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <span class="dot" id="dot"></span>
+    <h1>RGB bridge</h1>
+    <span id="status">Connecting to the bridge…</span>
+    <button id="rescan" type="button">Rescan devices</button>
+  </header>
+  <main>
+    <aside id="effects" aria-label="Effects"></aside>
+    <section class="stage">
+      <div id="mirror"></div>
+      <div class="preview-wrap">
+        <p>Effect canvas</p>
+        <div id="preview"><iframe id="frame" title="Effect canvas"></iframe><img id="snapshot" alt="Effect canvas"
+            hidden></div>
+      </div>
+    </section>
+    <aside id="controls" aria-label="Effect settings"></aside>
+  </main>
+
+  <script>
+    const ROLE = new URLSearchParams(location.search).get("role") === "renderer" ? "renderer" : "control";
+    const FPS = 30;
+    const $ = (id) => document.getElementById(id);
+    const frameEl = $("frame");
+    const sampler = document.createElement("canvas");
+    const sctx = sampler.getContext("2d", { willReadFrequently: true });
+
+    const state = {
+      ws: null,
+      connected: false,
+      renderers: 0,       // headless renderers connected to the bridge
+      watchers: 0,        // control windows open (renderer only)
+      srcdoc: "",         // the prepared effect page, kept so the preview can be reloaded
+      devices: [],
+      total: 0,
+      buffer: new Uint8Array(0),
+      effects: [],
+      current: null,
+      metas: [],
+      props: {},          // { [file]: { prop: value } }
+      brightness: 100,
+      mirrors: [],
+    };
+
+    // A control page renders only when nothing else is doing it.
+    const rendersHere = () => ROLE === "renderer" || state.renderers === 0;
+
+    function send(msg) {
+      if (state.ws?.readyState === 1) state.ws.send(JSON.stringify(msg));
+    }
+
+    /* ---------- bridge connection ---------- */
+
+    function connect() {
+      const ws = new WebSocket(`ws://${location.host}/ws?role=${ROLE}`);
+      ws.binaryType = "arraybuffer";
+      ws.onopen = () => { state.connected = true; updateStatus(); };
+      ws.onmessage = (ev) => {
+        if (typeof ev.data !== "string") return onMirrorFrame(ev.data);
+        const msg = JSON.parse(ev.data);
+        if (msg.type === "layout") setLayout(msg.devices);
+        else if (msg.type === "state") applySavedState(msg);
+        else if (msg.type === "renderers") {
+          const before = rendersHere();
+          state.renderers = msg.count;
+          if (rendersHere() !== before) refreshPreviewMode();
+          updateStatus();
+        }
+        else if (msg.type === "watchers") state.watchers = msg.count;
+        else if (msg.type === "preview") showSnapshot(msg.image);
+        else if (msg.type === "select") { state.props[msg.effect] = msg.props || {}; selectEffect(msg.effect, false); }
+        else if (msg.type === "set" && msg.effect === state.current) setProp(msg.prop, msg.value, false);
+        else if (msg.type === "brightness") state.brightness = msg.value;
+      };
+      ws.onclose = () => {
+        state.connected = false;
+        updateStatus();
+        setTimeout(connect, 2000);
+      };
+      state.ws = ws;
+    }
+
+    function applySavedState(saved) {
+      state.props = saved.props || {};
+      state.brightness = saved.brightness ?? 100;
+      const pick = state.effects.find((e) => e.file === saved.effect) || state.effects[0];
+      // If nothing was saved yet, announce our pick so the renderer follows it.
+      if (pick) selectEffect(pick.file, !saved.effect && ROLE === "control");
+    }
+
+    function updateStatus() {
+      const dot = $("dot"), status = $("status");
+      let on = false, text;
+      if (!state.connected) {
+        text = "The bridge isn't running. Start it (systemctl --user start rgb-bridge) and this window will reconnect.";
+      } else if (!state.devices.length) {
+        text = "OpenRGB isn't connected. Start OpenRGB with its SDK server on; the bridge retries on its own.";
+      } else {
+        on = true;
+        const names = state.devices.map((d) => `${d.name} (${d.leds.length} LEDs)`).join(", ");
+        text = ROLE === "control" && state.renderers === 0
+          ? `Sending to ${names}. Rendering in this window, so keep it open (or start the bridge with --render).`
+          : `Sending to ${names}. Rendering in the background, so you can close this window.`;
+      }
+      dot.classList.toggle("on", on);
+      status.textContent = text;
+    }
+
+    function setLayout(devices) {
+      state.devices = devices;
+      state.total = devices.reduce((n, d) => n + d.leds.length, 0);
+      state.buffer = new Uint8Array(state.total * 3);
+      updateStatus();
+      buildMirror();
+    }
+
+    $("rescan").onclick = () => send({ type: "rescan" });
+
+    /* ---------- keyboard mirror ---------- */
+
+    function buildMirror() {
+      const root = $("mirror");
+      root.textContent = "";
+      state.mirrors = [];
+      if (!state.devices.length) {
+        root.innerHTML = '<p class="empty">No devices yet. Once OpenRGB is running, your keyboard will appear here.</p>';
+        return;
+      }
+      for (const dev of state.devices) {
+        const cols = Math.max(1, new Set(dev.leds.map((l) => l.x)).size);
+        const rows = Math.max(1, new Set(dev.leds.map((l) => l.y)).size);
+        const label = document.createElement("p");
+        label.className = "device-name";
+        label.textContent = dev.name;
+        const canvas = document.createElement("canvas");
+        canvas.width = 1100;
+        canvas.height = Math.max(40, Math.round((1100 * rows) / cols));
+        root.append(label, canvas);
+        state.mirrors.push({ canvas, ctx: canvas.getContext("2d"), cell: Math.min(canvas.width / cols, canvas.height / rows) * 0.84 });
+      }
+    }
+
+    function keycap(ctx, x, y, s) {
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, s, s, s * 0.18); ctx.fill(); }
+      else ctx.fillRect(x, y, s, s);
+    }
+
+    function drawMirror() {
+      let k = 0;
+      state.devices.forEach((dev, d) => {
+        const m = state.mirrors[d];
+        if (!m) return;
+        const { ctx, canvas, cell } = m;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (const led of dev.leds) {
+          ctx.fillStyle = `rgb(${state.buffer[k]},${state.buffer[k + 1]},${state.buffer[k + 2]})`;
+          k += 3;
+          keycap(ctx, led.x * canvas.width - cell / 2, led.y * canvas.height - cell / 2, cell);
+        }
+      });
+    }
+
+    let tintCount = 0;
+    function tint() {
+      if (++tintCount % 8 || !state.total) return;
+      let r = 0, g = 0, b = 0;
+      for (let i = 0; i < state.buffer.length; i += 3) { r += state.buffer[i]; g += state.buffer[i + 1]; b += state.buffer[i + 2]; }
+      const lift = (v) => Math.round(90 + (v / state.total) * 0.65);
+      document.documentElement.style.setProperty("--live", `rgb(${lift(r)},${lift(g)},${lift(b)})`);
+    }
+
+    // While a background renderer is running, the bridge sends us copies of its frames.
+    function onMirrorFrame(data) {
+      if (rendersHere()) return;
+      const frame = new Uint8Array(data);
+      if (frame.length !== state.buffer.length) return;
+      state.buffer.set(frame);
+      drawMirror();
+      tint();
+    }
+
+    /* ---------- effects ---------- */
+
+    async function loadEffects() {
+      state.effects = await (await fetch("/api/effects")).json();
+      const list = $("effects");
+      list.textContent = "";
+      if (!state.effects.length) {
+        list.innerHTML = '<p class="empty">No effects found. Put .html effects in the effects folder, then reopen this window.</p>';
+        return;
+      }
+      for (const fx of state.effects) {
+        const btn = document.createElement("button");
+        btn.className = "effect";
+        btn.type = "button";
+        btn.dataset.file = fx.file;
+        btn.textContent = fx.title;
+        if (fx.description) {
+          const s = document.createElement("small");
+          s.textContent = fx.description;
+          btn.append(s);
+        }
+        btn.onclick = () => selectEffect(fx.file, true);
+        list.append(btn);
+      }
+    }
+
+    function coerce(type, raw) {
+      if (type === "number" || type === "hue") return Number(raw);
+      if (type === "boolean") return raw === true || raw === "true" || raw === "1" || raw === 1;
+      return raw == null ? "" : String(raw);
+    }
+
+    function parseMetas(doc) {
+      return [...doc.querySelectorAll("meta[property]")].map((m) => {
+        const type = (m.getAttribute("type") || "textfield").toLowerCase();
+        return {
+          prop: m.getAttribute("property"),
+          label: m.getAttribute("label") || m.getAttribute("property"),
+          type,
+          min: m.getAttribute("min") ?? "0",
+          max: m.getAttribute("max") ?? (type === "hue" ? "360" : "100"),
+          step: m.getAttribute("step") || "1",
+          values: (m.getAttribute("values") || "").split(",").map((s) => s.trim()).filter(Boolean),
+          def: coerce(type, m.getAttribute("default")),
+        };
+      });
+    }
+
+    async function selectEffect(file, announce) {
+      const res = await fetch("/effects/" + encodeURIComponent(file));
+      if (!res.ok) return;
+      const html = await res.text();
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const fx = state.effects.find((e) => e.file === file) || { title: file, description: "" };
+
+      state.current = file;
+      state.metas = parseMetas(doc);
+      const saved = state.props[file] || {};
+      const values = {};
+      for (const m of state.metas) values[m.prop] = m.prop in saved ? saved[m.prop] : m.def;
+      state.props[file] = values;
+
+      // SignalRGB exposes each <meta property> as a global before the effect runs;
+      // do the same, plus a silent stand-in for its audio API.
+      const globals = state.metas.map((m) => `window[${JSON.stringify(m.prop)}]=${JSON.stringify(values[m.prop])};`).join("");
+      const inject =
+        `<base href="/effects/"><script>` +
+        `window.engine=window.engine||{audio:{level:-100,density:0,width:0,freq:new Int8Array(200)}};` +
+        globals + `<\/script>`;
+      state.srcdoc = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (h) => h + inject) : inject + html;
+      // Only run the effect here if this page is the one rendering. Otherwise the
+      // preview shows snapshots of the background renderer's canvas instead.
+      frameEl.srcdoc = rendersHere() ? state.srcdoc : "";
+
+      document.querySelectorAll(".effect").forEach((b) => b.setAttribute("aria-current", String(b.dataset.file === file)));
+      if (ROLE === "control") buildControls(fx, values);
+      if (announce) send({ type: "select", effect: file, props: values });
+    }
+
+    /* ---------- settings panel ---------- */
+
+    function buildControls(fx, values) {
+      const root = $("controls");
+      root.textContent = "";
+      const h = document.createElement("h2");
+      h.textContent = fx.title;
+      root.append(h);
+      if (fx.description) {
+        const p = document.createElement("p");
+        p.className = "desc";
+        p.textContent = fx.description;
+        root.append(p);
+      }
+
+      root.append(rangeField("Brightness", 0, 100, 1, state.brightness, "%", (v) => {
+        state.brightness = v;
+        send({ type: "brightness", value: v });
+      }));
+      if (state.metas.length) root.append(document.createElement("hr"));
+
+      for (const m of state.metas) {
+        const set = (v) => setProp(m.prop, v, true);
+        let field;
+        if (m.type === "number" || m.type === "hue") {
+          field = rangeField(m.label, m.min, m.max, m.step, values[m.prop], m.type === "hue" ? "°" : "", set);
+        } else if (m.type === "boolean") {
+          field = document.createElement("div");
+          field.className = "field check";
+          const label = document.createElement("label");
+          const input = Object.assign(document.createElement("input"), { type: "checkbox", checked: !!values[m.prop] });
+          input.onchange = () => set(input.checked);
+          label.append(input, m.label);
+          field.append(label);
+        } else if (m.type === "color") {
+          field = simpleField(m.label, Object.assign(document.createElement("input"), { type: "color", value: values[m.prop] || "#ffffff" }), "input", set);
+        } else if (m.type === "combobox") {
+          const select = document.createElement("select");
+          for (const v of m.values) select.append(new Option(v, v, false, v === values[m.prop]));
+          field = simpleField(m.label, select, "change", set);
+        } else {
+          field = simpleField(m.label, Object.assign(document.createElement("input"), { type: "text", value: values[m.prop] }), "change", set);
+        }
+        root.append(field);
+      }
+    }
+
+    function rangeField(labelText, min, max, step, value, unit, onValue) {
+      const field = document.createElement("div");
+      field.className = "field";
+      const label = document.createElement("label");
+      const out = document.createElement("output");
+      out.textContent = value + unit;
+      label.append(labelText, out);
+      const input = Object.assign(document.createElement("input"), { type: "range", min, max, step, value });
+      input.setAttribute("aria-label", labelText);
+      input.oninput = () => { out.textContent = input.value + unit; onValue(Number(input.value)); };
+      field.append(label, input);
+      return field;
+    }
+
+    function simpleField(labelText, input, event, onValue) {
+      const field = document.createElement("div");
+      field.className = "field";
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      input.setAttribute("aria-label", labelText);
+      input.addEventListener(event, () => onValue(input.value));
+      field.append(label, input);
+      return field;
+    }
+
+    function setProp(prop, value, announce) {
+      if (!state.current) return;
+      state.props[state.current][prop] = value;
+      const win = frameEl.contentWindow;
+      if (win) {
+        win[prop] = value;
+        const hook = win[`on${prop}Changed`];   // SignalRGB's change-callback convention
+        if (typeof hook === "function") try { hook(); } catch (e) { console.warn(e); }
+      }
+      if (announce) send({ type: "set", effect: state.current, prop, value });
+    }
+
+    /* ---------- preview ---------- */
+
+    const snapshot = $("snapshot");
+
+    function refreshPreviewMode() {
+      const local = rendersHere();
+      frameEl.hidden = !local;
+      snapshot.hidden = local;
+      frameEl.srcdoc = local ? state.srcdoc : "";
+    }
+
+    function showSnapshot(image) {
+      if (!rendersHere()) snapshot.src = image;
+    }
+
+    /* ---------- sampling loop ---------- */
+
+    function fitPreview() {
+      const box = $("preview").getBoundingClientRect();
+      const w = sampler.width || 320, h = sampler.height || 200;
+      frameEl.style.width = w + "px";
+      frameEl.style.height = h + "px";
+      frameEl.style.transform = `scale(${box.width / w}, ${box.height / h})`;
+    }
+    new ResizeObserver(fitPreview).observe($("preview"));
+
+    let previewTick = 0;
+    function tick() {
+      if (!rendersHere() || !state.total) return;
+      const doc = frameEl.contentDocument;
+      const cv = doc && (doc.getElementById("exCanvas") || doc.querySelector("canvas"));
+      if (!cv || !cv.width) return;
+
+      if (sampler.width !== cv.width || sampler.height !== cv.height) {
+        sampler.width = cv.width; sampler.height = cv.height;
+        fitPreview();
+      }
+      const W = sampler.width, H = sampler.height;
+      sctx.clearRect(0, 0, W, H);
+      sctx.drawImage(cv, 0, 0);          // works for 2D and WebGL effect canvases
+      const px = sctx.getImageData(0, 0, W, H).data;
+      const gain = state.brightness / 100;
+
+      let k = 0;
+      for (const dev of state.devices) {
+        for (const led of dev.leds) {
+          const x = Math.min(W - 1, Math.floor(led.x * W));
+          const y = Math.min(H - 1, Math.floor(led.y * H));
+          const i = (y * W + x) * 4;
+          state.buffer[k++] = px[i] * gain;
+          state.buffer[k++] = px[i + 1] * gain;
+          state.buffer[k++] = px[i + 2] * gain;
+        }
+      }
+
+      const ws = state.ws;
+      if (ws && ws.readyState === 1 && ws.bufferedAmount < 64 * 1024) {
+        ws.send(state.buffer);
+        // About 10 snapshots a second for any open control window's preview.
+        if (ROLE === "renderer" && state.watchers > 0 && ++previewTick % 3 === 0) {
+          send({ type: "preview", image: sampler.toDataURL("image/jpeg", 0.8) });
+        }
+      }
+      if (ROLE === "control") { drawMirror(); tint(); }
+    }
+    setInterval(tick, 1000 / FPS);
+
+    /* ---------- start ---------- */
+
+    (async function start() {
+      await loadEffects();
+      connect();   // the bridge replies with the saved state, which picks the effect
+    })();
+  </script>
+</body>
+
+</html>

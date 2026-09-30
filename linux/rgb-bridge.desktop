@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=RGB Bridge
+Comment=Choose and tweak keyboard lighting effects
+Exec=sh -c '$HOME/Documents/test/.venv/bin/python $HOME/Documents/test/control.py'
+Icon=preferences-desktop-color
+Terminal=false
+Categories=Settings;HardwareSettings;

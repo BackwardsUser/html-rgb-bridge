@@ -1,0 +1,18 @@
+[Unit]
+Description=HTML effects to OpenRGB bridge
+Wants=openrgb-server.service
+After=openrgb-server.service
+
+[Service]
+# Adjust the paths if you keep the project somewhere else.
+WorkingDirectory=%h/Documents/test
+ExecStart=%h/Documents/test/.venv/bin/python bridge.py --render
+Restart=on-failure
+RestartSec=3
+# Send SIGTERM only to the bridge so it can stop its headless browser cleanly;
+# anything still running after it exits is killed.
+KillMode=mixed
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Fireflies</title>
+    <meta description="Glowing orbs drift across the board, leaving trails, while ripples spread out and fade." />
+    <meta property="orbCount" label="Fireflies" type="number" min="1" max="14" default="7" />
+    <meta property="driftSpeed" label="Drift speed" type="number" min="1" max="10" default="4" />
+    <meta property="rippleRate" label="Ripples (0 is off)" type="number" min="0" max="10" default="4" />
+    <meta property="paletteName" label="Palette" type="combobox" values="Aurora,Sunset,Reef,Moonlight"
+        default="Aurora" />
+    <meta property="trails" label="Trails" type="boolean" default="1" />
+</head>
+
+<body style="margin:0;background:#000">
+    <script type="module">
+        import zim from "https://zimjs.org/cdn/020/zim";
+
+        // Settings come from the bridge as globals (SignalRGB style).
+        // The fallbacks let this file also run on its own in a normal browser tab.
+        const setting = (name, fallback) => (window[name] ?? fallback);
+        const on = (v) => v === true || v === 1 || v === "1" || v === "true";
+
+        const PALETTES = {
+            Aurora: ["#00ffa3", "#00c2ff", "#7a5cff", "#ff4fd8"],
+            Sunset: ["#ff3d00", "#ff9e00", "#ff006e", "#ffd166"],
+            Reef: ["#00f5d4", "#00bbf9", "#fee440", "#f15bb5"],
+            Moonlight: ["#ffffff", "#bfe3ff", "#8fb8ff", "#d9c7ff"],
+        };
+        const palette = () => PALETTES[setting("paletteName", "Aurora")] || PALETTES.Aurora;
+
+        // 320x200 canvas named exCanvas: the size and id the bridge samples.
+        // retina:false keeps the pixel buffer at exactly 320x200.
+        new Frame({
+            scaling: FIT, width: 320, height: 200,
+            color: black, outerColor: black,
+            canvasID: "exCanvas", retina: false,
+            ready,
+        });
+
+        function ready() {
+            // Trails: stop clearing the canvas and instead lay a translucent black
+            // sheet over the last frame, so everything fades out behind itself.
+            S.autoClear = false;
+            const fade = new Rectangle(W, H, black).addTo(S, 0);
+            const setTrails = () => fade.alp(on(setting("trails", 1)) ? 0.16 : 1);
+            setTrails();
+
+            const orbs = new Container(W, H).addTo();
+            const ripples = new Container(W, H).addTo();
+
+            function makeOrbs() {
+                orbs.removeAllChildren();
+                const colors = palette();
+                const speed = Number(setting("driftSpeed", 4));
+                const count = Number(setting("orbCount", 7));
+                for (let i = 0; i < count; i++) {
+                    const color = colors[i % colors.length];
+                    const r = rand(16, 30);
+                    const orb = new Circle(r, color)
+                        .loc(rand(W), rand(H), orbs)
+                        .ble("lighter")          // overlapping glows add up like real light
+                        .sha(color, 0, 0, r);    // soft halo so neighbouring keys catch the glow
+                    // wiggle() wanders a property around a base value at random intervals.
+                    orb.wiggle({
+                        property: "x", baseAmount: W / 2, minAmount: 20, maxAmount: W / 2,
+                        minTime: 6 / speed, maxTime: 14 / speed, pauseOnBlur: false
+                    });
+                    orb.wiggle({
+                        property: "y", baseAmount: H / 2, minAmount: 10, maxAmount: H / 2,
+                        minTime: 5 / speed, maxTime: 12 / speed, pauseOnBlur: false
+                    });
+                    // Each firefly also breathes on its own rhythm.
+                    orb.animate({
+                        props: { alpha: 0.35 }, time: rand(1.5, 3.5, false),
+                        rewind: true, loop: true, ease: "sineInOut", pauseOnBlur: false
+                    });
+                }
+            }
+
+            let rippleTimer;
+            function startRipples() {
+                if (rippleTimer) rippleTimer.clear();
+                const rate = Number(setting("rippleRate", 4));
+                if (rate <= 0) return;
+                rippleTimer = interval({ min: 3 / rate, max: 9 / rate }, () => {
+                    const color = palette()[rand(palette().length - 1)];
+                    new Circle(6, clear, color, 2)
+                        .loc(rand(W), rand(H), ripples)
+                        .ble("lighter")
+                        .animate({
+                            props: { scale: 26, alpha: 0 },
+                            time: rand(1.8, 2.8, false),
+                            ease: "quadOut",
+                            call: (ring) => ring.dispose(),
+                        });
+                }, null, true, false);
+            }
+
+            makeOrbs();
+            startRipples();
+            Ticker.always();   // redraw every frame so the fade sheet keeps working
+
+            // The bridge calls on<property>Changed() when a setting moves.
+            window.onorbCountChanged = makeOrbs;
+            window.ondriftSpeedChanged = makeOrbs;
+            window.onpaletteNameChanged = makeOrbs;
+            window.onrippleRateChanged = startRipples;
+            window.ontrailsChanged = setTrails;
+        }
+    </script>
+</body>
+
+</html>

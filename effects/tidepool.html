@@ -1,0 +1,50 @@
+<head>
+<title>Tidepool</title>
+<meta description="Slow, layered waves drifting across the board." />
+<meta property="speed" label="Speed" type="number" min="1" max="20" default="6" />
+<meta property="scale" label="Wave size" type="number" min="1" max="10" default="5" />
+<meta property="palette" label="Palette" type="combobox" values="Ocean,Ember,Moss,Neon" default="Ocean" />
+<meta property="reverse" label="Reverse direction" type="boolean" default="0" />
+</head>
+<body style="margin:0;padding:0;background:#000">
+<canvas id="exCanvas" width="320" height="200"></canvas>
+<script>
+const canvas = document.getElementById("exCanvas");
+const ctx = canvas.getContext("2d");
+const palettes = {
+  Ocean: [[3, 18, 60], [0, 130, 200], [120, 255, 230]],
+  Ember: [[40, 0, 0], [255, 60, 0], [255, 210, 90]],
+  Moss:  [[4, 28, 10], [50, 160, 40], [220, 255, 120]],
+  Neon:  [[70, 0, 160], [255, 0, 140], [0, 255, 220]],
+};
+// Render at low resolution and let the browser smooth it up to 320x200.
+const lo = document.createElement("canvas");
+lo.width = 80; lo.height = 50;
+const lctx = lo.getContext("2d");
+const img = lctx.createImageData(80, 50);
+
+function mix(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+function pick(p, t) { t = Math.max(0, Math.min(1, t)); return t < 0.5 ? mix(p[0], p[1], t * 2) : mix(p[1], p[2], (t - 0.5) * 2); }
+
+let t = 0, last = performance.now();
+function update(now) {
+  t += ((now - last) / 1000) * speed * 0.15 * (reverse ? -1 : 1);
+  last = now;
+  const p = palettes[palette] || palettes.Ocean;
+  const s = 11 - scale;
+  for (let y = 0; y < 50; y++) {
+    for (let x = 0; x < 80; x++) {
+      const u = (x / 80) * s, v = (y / 50) * s;
+      const w = Math.sin(u * 1.3 + t) + Math.sin(v * 1.7 - t * 0.8) + Math.sin((u + v) * 0.9 + t * 1.3);
+      const c = pick(p, (w + 3) / 6);
+      const i = (y * 80 + x) * 4;
+      img.data[i] = c[0]; img.data[i + 1] = c[1]; img.data[i + 2] = c[2]; img.data[i + 3] = 255;
+    }
+  }
+  lctx.putImageData(img, 0, 0);
+  ctx.drawImage(lo, 0, 0, 320, 200);
+  requestAnimationFrame(update);
+}
+requestAnimationFrame(update);
+</script>
+</body>

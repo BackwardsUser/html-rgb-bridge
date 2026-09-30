@@ -1,0 +1,3 @@
+aiohttp>=3.9
+openrgb-python>=0.3
+pywebview>=5
