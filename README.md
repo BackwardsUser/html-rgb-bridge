@@ -59,6 +59,8 @@ installed by your package manager.
 
 ## Run it once, by hand
 
+Skip the first command if the OpenRGB app is already running with its SDK server on.
+
 ```bash
 openrgb --server &
 .venv/bin/python bridge.py --render
@@ -70,8 +72,13 @@ You can also open http://127.0.0.1:6743 in a browser instead of using `control.p
 ## Run it at login
 
 The files in `linux/` set this up as systemd user services plus an app launcher
-entry. **Edit the paths in them first**: they point at wherever the project lived
-on my machine.
+entry. Before running anything:
+
+- **Edit the paths in the `linux/` files.** They point at wherever the project
+  lived on my machine.
+- **Already running the OpenRGB app with its SDK server on? Don't install
+  `openrgb-server`.** Only one OpenRGB instance can control the hardware at a
+  time. Use the second set of commands below instead of the first.
 
 ```bash
 mkdir -p ~/.config/systemd/user ~/.local/share/applications
@@ -81,10 +88,20 @@ systemctl --user daemon-reload
 systemctl --user enable --now openrgb-server rgb-bridge
 ```
 
+If you already run the OpenRGB app, install only the bridge. Don't copy
+`openrgb-server.service` at all: the bridge's service asks systemd to start it
+whenever the file is installed, even if it isn't enabled.
+
+```bash
+mkdir -p ~/.config/systemd/user ~/.local/share/applications
+cp linux/rgb-bridge.service ~/.config/systemd/user/
+cp linux/rgb-bridge.desktop ~/.local/share/applications/
+systemctl --user daemon-reload
+systemctl --user enable --now rgb-bridge
+```
+
 Then open **RGB Bridge** from your app launcher.
 
-If you already run the OpenRGB app with its SDK server turned on, skip
-`openrgb-server`. Only one OpenRGB instance can control the hardware at a time.
 To look at the OpenRGB window while the service is running, connect it to the
 service with `openrgb --client 127.0.0.1:6742` rather than starting a second copy.
 
